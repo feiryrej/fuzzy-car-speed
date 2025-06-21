@@ -37,7 +37,7 @@ def get_membership(input, points):
             if input == x1: return y1
             if input == x2: return y2
             if y1 == y2: return y1
-            if x1 == x2: return y1  # vertical line
+            if x1 == x2: return y1 
 
             # Linear interpolation
             slope = (y2 - y1) / (x2 - x1)
