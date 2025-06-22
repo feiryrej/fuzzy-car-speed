@@ -1,312 +1,226 @@
-import numpy as np
 import matplotlib.pyplot as plt
 
-class FuzzyLogicSystem:
-    def __init__(self):
-        # Define universe of discourse
-        self.temp_range = np.arange(30, 90, 1)  # Temperature from 30°F to 89°F
-        self.cloud_range = np.arange(0, 101, 1)  # Cloud cover from 0% to 100%
-        self.speed_range = np.arange(0, 101, 1)  # Speed from 0 mph to 100 mph
-        
-    def trapmf(self, x, params):
-        """Trapezoidal membership function - CORRECTED VERSION"""
-        a, b, c, d = params
-        
-        # Ensure x is a numpy array for vectorized operations
-        x = np.asarray(x)
-        
-        # Initialize output with zeros
-        y = np.zeros_like(x, dtype=float)
-        
-        # Calculate membership values
-        # Left slope: from a to b
-        left_mask = (x >= a) & (x <= b)
-        if b != a:
-            y[left_mask] = (x[left_mask] - a) / (b - a)
-        else:
-            y[left_mask] = 1.0
-        
-        # Flat top: from b to c
-        flat_mask = (x > b) & (x < c)
-        y[flat_mask] = 1.0
-        
-        # Right slope: from c to d
-        right_mask = (x >= c) & (x <= d)
-        if d != c:
-            y[right_mask] = (d - x[right_mask]) / (d - c)
-        else:
-            y[right_mask] = 1.0
-        
-        # Handle special case where b == c (triangular)
-        if b == c:
-            peak_mask = x == b
-            y[peak_mask] = 1.0
-        
-        return np.clip(y, 0, 1)
-    
-    def trimf(self, x, params):
-        """Triangular membership function - CORRECTED VERSION"""
-        a, b, c = params
-        
-        # Ensure x is a numpy array for vectorized operations
-        x = np.asarray(x)
-        
-        # Initialize output with zeros
-        y = np.zeros_like(x, dtype=float)
-        
-        # Left slope: from a to b
-        left_mask = (x >= a) & (x <= b)
-        if b != a:
-            y[left_mask] = (x[left_mask] - a) / (b - a)
-        else:
-            y[left_mask] = 1.0
-        
-        # Right slope: from b to c
-        right_mask = (x > b) & (x <= c)
-        if c != b:
-            y[right_mask] = (c - x[right_mask]) / (c - b)
-        else:
-            y[right_mask] = 1.0
-        
-        # Peak point
-        peak_mask = x == b
-        y[peak_mask] = 1.0
-        
-        return np.clip(y, 0, 1)
-    
-    def gaussmf(self, x, params):
-        """Gaussian membership function"""
-        sigma, center = params
-        x = np.asarray(x)
-        return np.exp(-0.5 * ((x - center) / sigma) ** 2)
-    
-    def get_membership_value(self, x, func_type, params):
-        """Get membership value for a single input or array"""
-        if func_type == 'trapmf':
-            return self.trapmf(x, params)
-        elif func_type == 'trimf':
-            return self.trimf(x, params)
-        elif func_type == 'gaussmf':
-            return self.gaussmf(x, params)
-        else:
-            raise ValueError("Unknown membership function type")
-    
-    def define_membership_functions(self):
-        """Define membership functions for all fuzzy sets"""
-        
-        # Temperature membership functions
-        self.temp_functions = {
-            'Cool': ('trapmf', [30, 35, 55, 65]),    # Cool: peaks at 35-55°F, fades 30-65°F
-            'Warm': ('trapmf', [55, 65, 85, 90])     # Warm: peaks at 65-85°F, fades 55-90°F
-        }
-        
-        # Cloud Cover membership functions
-        self.cloud_functions = {
-            'Sunny': ('trapmf', [0, 5, 25, 35]),     # Sunny: peaks at 5-25%, fades 0-35%
-            'Cloudy': ('trapmf', [25, 50, 90, 100])  # Cloudy: peaks at 50-90%, fades 25-100%
-        }
-        
-        # Speed membership functions (for output)
-        self.speed_functions = {
-            'Slow': ('trapmf', [0, 10, 35, 45]),     # Slow: peaks at 10-35 mph, fades 0-45 mph
-            'Fast': ('trapmf', [45, 60, 90, 100])    # Fast: peaks at 60-90 mph, fades 45-100 mph
-        }
-    
-    def fuzzify_inputs(self, temperature, cloud_cover):
-        """Fuzzify the crisp inputs"""
-        # Temperature memberships
-        cool_membership = self.get_membership_value(temperature, 
-                                                   self.temp_functions['Cool'][0], 
-                                                   self.temp_functions['Cool'][1])
-        warm_membership = self.get_membership_value(temperature, 
-                                                   self.temp_functions['Warm'][0], 
-                                                   self.temp_functions['Warm'][1])
-        
-        # Cloud cover memberships
-        sunny_membership = self.get_membership_value(cloud_cover, 
-                                                    self.cloud_functions['Sunny'][0], 
-                                                    self.cloud_functions['Sunny'][1])
-        cloudy_membership = self.get_membership_value(cloud_cover, 
-                                                     self.cloud_functions['Cloudy'][0], 
-                                                     self.cloud_functions['Cloudy'][1])
-        
-        return {
-            'Cool': cool_membership,
-            'Warm': warm_membership,
-            'Sunny': sunny_membership,
-            'Cloudy': cloudy_membership
-        }
-    
-    def apply_rules(self, memberships):
-        """Apply fuzzy rules using min for AND operation - ORIGINAL 2 RULES ONLY"""
-        # Rule 1: If Sunny AND Warm, then Fast
-        rule1_strength = min(memberships['Sunny'], memberships['Warm'])
-        
-        # Rule 2: If Cloudy AND Cool, then Slow
-        rule2_strength = min(memberships['Cloudy'], memberships['Cool'])
-        
-        return {
-            'Fast': rule1_strength,
-            'Slow': rule2_strength
-        }
-    
-    def aggregate_outputs(self, rule_outputs):
-        """Aggregate the rule outputs to create output fuzzy sets"""
-        # Create output membership functions based on rule strengths
-        fast_output = np.minimum(rule_outputs['Fast'], 
-                                self.get_membership_value(self.speed_range, 
-                                                         self.speed_functions['Fast'][0], 
-                                                         self.speed_functions['Fast'][1]))
-        
-        slow_output = np.minimum(rule_outputs['Slow'], 
-                                self.get_membership_value(self.speed_range, 
-                                                         self.speed_functions['Slow'][0], 
-                                                         self.speed_functions['Slow'][1]))
-        
-        # Combine using max (union)
-        combined_output = np.maximum(fast_output, slow_output)
-        
-        return combined_output, {'Fast': fast_output, 'Slow': slow_output}
-    
-    def defuzzify(self, output_fuzzy_set):
-        """Defuzzify using centroid method"""
-        if np.sum(output_fuzzy_set) == 0:
-            return 50  # Default moderate speed if no rules fire
-        
-        # Centroid defuzzification
-        centroid = np.sum(self.speed_range * output_fuzzy_set) / np.sum(output_fuzzy_set)
-        return centroid
-    
-    def evaluate(self, temperature, cloud_cover, show_details=False):
-        """Main evaluation function"""
-        # Step 1: Fuzzify inputs
-        memberships = self.fuzzify_inputs(temperature, cloud_cover)
-        
-        # Step 2: Apply rules
-        rule_outputs = self.apply_rules(memberships)
-        
-        # Step 3: Aggregate outputs
-        combined_output, individual_outputs = self.aggregate_outputs(rule_outputs)
-        
-        # Step 4: Defuzzify
-        final_speed = self.defuzzify(combined_output)
-        
-        if show_details:
-            print(f"\n=== Fuzzy Logic Evaluation ===")
-            print(f"Input - Temperature: {temperature}°F, Cloud Cover: {cloud_cover}%")
-            print(f"\nFuzzification:")
-            print(f"  Cool: {memberships['Cool']:.3f}")
-            print(f"  Warm: {memberships['Warm']:.3f}")
-            print(f"  Sunny: {memberships['Sunny']:.3f}")
-            print(f"  Cloudy: {memberships['Cloudy']:.3f}")
-            print(f"\nRule Evaluation:")
-            print(f"  Rule 1 (Sunny AND Warm → Fast): {rule_outputs['Fast']:.3f}")
-            print(f"  Rule 2 (Cloudy AND Cool → Slow): {rule_outputs['Slow']:.3f}")
-            print(f"\nFinal Speed: {final_speed:.2f} mph")
-        
-        return final_speed, memberships, rule_outputs
-    
-    def plot_membership_functions(self):
-        """Plot all membership functions"""
-        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-        
-        # Temperature membership functions
-        axes[0, 0].plot(self.temp_range, 
-                       self.get_membership_value(self.temp_range, 
-                                               self.temp_functions['Cool'][0], 
-                                               self.temp_functions['Cool'][1]), 
-                       'b-', label='Cool', linewidth=2)
-        axes[0, 0].plot(self.temp_range, 
-                       self.get_membership_value(self.temp_range, 
-                                               self.temp_functions['Warm'][0], 
-                                               self.temp_functions['Warm'][1]), 
-                       'r-', label='Warm', linewidth=2)
-        axes[0, 0].set_title('Temperature Membership Functions')
-        axes[0, 0].set_xlabel('Temperature (°F)')
-        axes[0, 0].set_ylabel('Membership')
-        axes[0, 0].legend()
-        axes[0, 0].grid(True, alpha=0.3)
-        
-        # Cloud cover membership functions
-        axes[0, 1].plot(self.cloud_range, 
-                       self.get_membership_value(self.cloud_range, 
-                                               self.cloud_functions['Sunny'][0], 
-                                               self.cloud_functions['Sunny'][1]), 
-                       'y-', label='Sunny', linewidth=2)
-        axes[0, 1].plot(self.cloud_range, 
-                       self.get_membership_value(self.cloud_range, 
-                                               self.cloud_functions['Cloudy'][0], 
-                                               self.cloud_functions['Cloudy'][1]), 
-                       'g-', label='Cloudy', linewidth=2)
-        axes[0, 1].set_title('Cloud Cover Membership Functions')
-        axes[0, 1].set_xlabel('Cloud Cover (%)')
-        axes[0, 1].set_ylabel('Membership')
-        axes[0, 1].legend()
-        axes[0, 1].grid(True, alpha=0.3)
-        
-        # Speed membership functions
-        axes[1, 0].plot(self.speed_range, 
-                       self.get_membership_value(self.speed_range, 
-                                               self.speed_functions['Slow'][0], 
-                                               self.speed_functions['Slow'][1]), 
-                       'purple', label='Slow', linewidth=2)
-        axes[1, 0].plot(self.speed_range, 
-                       self.get_membership_value(self.speed_range, 
-                                               self.speed_functions['Fast'][0], 
-                                               self.speed_functions['Fast'][1]), 
-                       'orange', label='Fast', linewidth=2)
-        axes[1, 0].set_title('Speed Membership Functions')
-        axes[1, 0].set_xlabel('Speed (mph)')
-        axes[1, 0].set_ylabel('Membership')
-        axes[1, 0].legend()
-        axes[1, 0].grid(True, alpha=0.3)
-        
-        # Remove the unused subplot
-        axes[1, 1].remove()
-        
-        plt.tight_layout()
+# --- Membership Function Definitions ---
+MFS_DEFINITION = {
+    "temperature": {
+        "Freezing": [(0, 1), (30, 1), (50, 0), (110, 0)],
+        "Cool": [(0, 0), (30, 0), (50, 1), (70, 0), (110, 0)],
+        "Warm": [(0, 0), (50, 0), (70, 1), (90, 0), (110, 0)],
+        "Hot": [(0, 0), (70, 0), (90, 1), (110, 1)],
+    },
+    "cover": {
+        "Sunny": [(0, 1), (20, 1), (40, 0), (100, 0)],
+        "Partly": [(0, 0), (20, 0), (50, 1), (80, 0), (100, 0)],
+        "Overcast": [(0, 0), (60, 0), (80, 1), (100, 1)],
+    },
+    "speed": {
+        "Slow": [(0, 1), (25, 1), (75, 0), (100, 0)],
+        "Fast": [(0, 0), (25, 0), (75, 1), (100, 1)],
+    }
+}
+
+# --- Membership Function Calculation ---
+def get_membership(input, points):
+    if not points:
+        return 0.0
+
+    if input <= points[0][0]:
+        return points[0][1]
+    if input >= points[-1][0]:
+        return points[-1][1]
+
+    for i in range(len(points) - 1):
+        x1, y1 = points[i]
+        x2, y2 = points[i + 1]
+
+        if x1 <= input <= x2:
+            if input == x1: return y1
+            if input == x2: return y2
+            if y1 == y2: return y1
+            if x1 == x2: return y1 
+
+            # Linear interpolation
+            slope = (y2 - y1) / (x2 - x1)
+            intercept = y1 - slope * x1
+            return slope * input + intercept
+
+    return 0.0
+
+
+# --- Fuzzification ---
+def fuzzify(input, mfs):
+    memberships = {}
+    for set_name, points in mfs.items():
+        memberships[set_name] = get_membership(input, points)
+    return memberships
+
+
+# --- Rule Evaluation ---
+def apply_rules(temp_mfs, cover_mfs):
+    speed_activations = {"Slow": 0.0, "Fast": 0.0}
+
+    rule1 = min(temp_mfs.get("Warm", 0.0), cover_mfs.get("Sunny", 0.0))
+    rule2 = min(temp_mfs.get("Cool", 0.0), cover_mfs.get("Partly", 0.0))
+
+    speed_activations["Fast"] = max(speed_activations["Fast"], rule1)
+    speed_activations["Slow"] = max(speed_activations["Slow"], rule2)
+
+    return speed_activations
+
+
+# --- Output Aggregation ---
+def aggregate(x_speed, activations, speed_mfs):
+    agg_value = 0.0
+    for set_name, act_strength in activations.items():
+        if act_strength > 0:
+            original = get_membership(x_speed, speed_mfs[set_name])
+            clipped = min(act_strength, original)
+            agg_value = max(agg_value, clipped)
+    return agg_value
+
+
+# --- Defuzzification (COG) ---
+def defuzzify(activations, speed_mfs, num_samples=101):
+    min_x, max_x = 0, 100
+    x_samples = [min_x + i * (max_x - min_x) / (num_samples - 1) for i in range(num_samples)]
+
+    num_sum = 0.0
+    denom_sum = 0.0
+    agg_points = []
+
+    for x in x_samples:
+        y = aggregate(x, activations, speed_mfs)
+        num_sum += x * y
+        denom_sum += y
+        agg_points.append((x, y))
+
+    if denom_sum == 0:
+        return 0.0, agg_points
+
+    return num_sum / denom_sum, agg_points
+
+
+# --- Plotting Functions ---
+def plot_mfs(ax, var_name, mfs_data, input_val=None, fuz_vals=None):
+    ax.set_title(f"Membership Functions for {var_name}")
+    ax.set_xlabel(var_name)
+    ax.set_ylabel("Membership Degree")
+    ax.grid(True, linestyle='--', alpha=0.7)
+
+    all_x = [p[0] for mf_d in mfs_data.values() for p in mf_d]
+    min_x, max_x = min(all_x), max(all_x)
+    x_range = [min_x + i * (max_x - min_x) / 200 for i in range(201)]
+
+    for mf_name, pts in mfs_data.items():
+        y_vals = [get_membership(x, pts) for x in x_range]
+        ax.plot(x_range, y_vals, label=mf_name)
+
+    if input_val is not None and fuz_vals is not None:
+        ax.vlines(input_val, 0, 1, colors='r', linestyles='dashed', label=f"Input = {input_val:.2f}")
+        for mf_name, mem_deg in fuz_vals.items():
+            if mem_deg > 0.001:
+                ax.hlines(mem_deg, min_x, input_val, colors='gray', linestyles='dotted', alpha=0.7)
+                ax.plot(input_val, mem_deg, 'ro', markersize=5)
+
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_xlim(min_x, max_x)
+
+
+def plot_agg(ax, agg_pts, cog, activations, speed_mfs):
+    ax.set_title("Aggregated Output and Defuzzification")
+    ax.set_xlabel("Speed")
+    ax.set_ylabel("Membership Degree")
+    ax.grid(True, linestyle='--', alpha=0.7)
+
+    x_range_spd = [i * 0.5 for i in range(201)]
+
+    for mf_name, pts in speed_mfs.items():
+        y_vals = [get_membership(x, pts) for x in x_range_spd]
+        ax.plot(x_range_spd, y_vals, label=f"{mf_name}", linestyle='dashed', alpha=0.7)
+
+    for mf_name, act_strength in activations.items():
+        if act_strength > 0:
+            clipped = [min(act_strength, get_membership(x, speed_mfs[mf_name])) for x in x_range_spd]
+            ax.plot(x_range_spd, clipped, linestyle='--', label=f"Clipped '{mf_name}'", alpha=0.8)
+
+    x_agg = [p[0] for p in agg_pts]
+    y_agg = [p[1] for p in agg_pts]
+    ax.plot(x_agg, y_agg, color='purple', linewidth=2, label="Aggregated Output Set")
+    ax.fill_between(x_agg, y_agg, color='purple', alpha=0.3)
+
+    ax.vlines(cog, 0, max(y_agg + [1.0]), colors='r', linestyles='solid', linewidth=2, label=f"COG = {cog:.2f}")
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_xlim(0, 100)
+
+
+# --- Main Program Loop ---
+if __name__ == "__main__":
+    while True:
+        # --- Input Section ---
+        while True:
+            try:
+                temp = float(input("Enter temperature in °F: "))
+                break
+            except ValueError:
+                print("Invalid temperature input. Try again.")
+
+        while True:
+            try:
+                cover = float(input("Enter cloud cover %: "))
+                break
+            except ValueError:
+                print("Invalid cloud cover input. Try again.")
+
+        # --- Fuzzification ---
+        temp_mfs = fuzzify(temp, MFS_DEFINITION["temperature"])
+        cover_mfs = fuzzify(cover, MFS_DEFINITION["cover"])
+
+        print("\n--- Temperature Fuzzification ---")
+        for k, v in temp_mfs.items():
+            print(f"{k}: {v:.3f}")
+
+        print("\n--- Cloud Cover Fuzzification ---")
+        for k, v in cover_mfs.items():
+            print(f"{k}: {v:.3f}")
+
+        # --- Rule Evaluation ---
+        speed_acts = apply_rules(temp_mfs, cover_mfs)
+        print("\n--- Rule-Based Speed Activations ---")
+        for k, v in speed_acts.items():
+            print(f"{k}: {v:.3f}")
+
+        # --- Defuzzification ---
+        speed_cog, agg_curve = defuzzify(speed_acts, MFS_DEFINITION["speed"])
+        print(f"\nDefuzzified Speed Output (COG): {speed_cog:.3f}")
+
+        # --- Defuzz Table Display ---
+        print("\n-------------------------------")
+        print("|   X   |   Y   |   X * Y     |")
+        print("-------------------------------")
+        sum_y, sum_xy = 0.0, 0.0
+        for x in range(0, 101, 5):
+            y = aggregate(x, speed_acts, MFS_DEFINITION["speed"])
+            xy = x * y
+            sum_y += y
+            sum_xy += xy
+            print(f"{x:6} {y:7.3f} {xy:12.3f}")
+        print("-------------------------------")
+        print(f"Sum Y: {sum_y:.3f}, Sum XY: {sum_xy:.3f}")
+        print(f"COG = {sum_xy:.3f} / {sum_y:.3f} = {sum_xy/sum_y:.5f}")
+
+        # --- Plotting ---
+        fig, axs = plt.subplots(3, 1, figsize=(12, 18))
+        plt.subplots_adjust(hspace=0.5, right=0.75)
+        plot_mfs(axs[0], "Temperature", MFS_DEFINITION["temperature"], temp, temp_mfs)
+        plot_mfs(axs[1], "Cloud Cover", MFS_DEFINITION["cover"], cover, cover_mfs)
+        plot_agg(axs[2], agg_curve, speed_cog, speed_acts, MFS_DEFINITION["speed"])
+        plt.suptitle("Fuzzy Logic Speed Decision System", fontsize=16, y=0.96)
         plt.show()
 
-def test_fuzzy_system():
-    """Test the fuzzy system with the provided test cases"""
-    fuzzy_system = FuzzyLogicSystem()
-    fuzzy_system.define_membership_functions()
-    
-    # Test cases from the lab
-    test_cases = [
-        (65, 25),  # Temp = 65°F, Cloud Cover = 25%
-        (62, 47),  # Temp = 62°F, Cloud Cover = 47%
-        (75, 30),  # Temp = 75°F, Cloud Cover = 30%
-        (53, 65),  # Temp = 53°F, Cloud Cover = 65%
-        (68, 70)   # Temp = 68°F, Cloud Cover = 70%
-    ]
-    
-    print("=== FUZZY LOGIC DRIVING SPEED SYSTEM ===\n")
-    
-    for i, (temp, cloud) in enumerate(test_cases, 1):
-        print(f"Test Case {i}:")
-        speed, memberships, rules = fuzzy_system.evaluate(temp, cloud, show_details=True)
-        print("-" * 50)
-    
-    return fuzzy_system
-
-# Run the test
-if __name__ == "__main__":
-    system = test_fuzzy_system()
-    
-    # Uncomment the line below to see the membership function plots
-    # system.plot_membership_functions()
-    
-    # Interactive testing
-    print("\n=== INTERACTIVE TESTING ===")
-    print("You can now test with custom values:")
-    
-    try:
-        temp = float(input("Enter temperature (°F): "))
-        cloud = float(input("Enter cloud cover (%): "))
-        speed, _, _ = system.evaluate(temp, cloud, show_details=True)
-        print(f"\nRecommended driving speed: {speed:.2f} mph")
-    except ValueError:
-        print("Invalid input. Please enter numeric values.")
-    except KeyboardInterrupt:
-        print("\nProgram terminated by user.")
+        # --- Ask User to Run Again ---
+        repeat = input("\nWould you like to enter new values? (y/n): ").strip().lower()
+        if repeat != 'y':
+            print("Exiting program. Goodbye!")
+            break
